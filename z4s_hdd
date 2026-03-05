@@ -17,6 +17,7 @@ write_ec() {
 
 # Grant EC write access
 write_ec 89 "0b"
+write_ec 80 "01"
 
 # Staggered spin-up: 5s delay per drive is MANDATORY to prevent peak current overload
 for v in c0 f0 fc ff; do
