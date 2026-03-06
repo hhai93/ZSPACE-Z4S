@@ -1,165 +1,105 @@
-# NAS ZSpace Z4S - HDD Power Enable for Linux
+# ZSpace Z4S — Linux HDD Power & LED Monitor
 
-![GitHub](https://img.shields.io/badge/license-MIT-blue.svg) ![GitHub last commit](https://img.shields.io/github/last-commit/hhai93/zspace-z4s)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Last Commit](https://img.shields.io/github/last-commit/hhai93/zspace-z4s)
 
-Enable hard drive power on the ZSpace Z4S NAS when running non-stock Linux operating systems such as Ubuntu, Debian, or other Linux distributions.
+Userspace daemon for ZSpace Z4S NAS — enables SATA power and drives bay LED indicators on generic Linux (Ubuntu, Debian, etc.).
 
-------------------------------------------------------------------------
+---
 
-## Overview
+## Background
 
-When installing a generic Linux distribution on the ZSpace Z4S, the hard drives may remain powered off after boot. This occurs because the original firmware controls SATA power through proprietary kernel modules that are not included in standard Linux systems.
+Stock ZSpace firmware controls SATA power and LEDs via proprietary kernel modules (`sata_ahci_power.ko`, `leds_ec.ko`). These are unavailable on standard Linux kernels. This project reimplements the required EC (Embedded Controller) initialization sequence entirely in userspace — no kernel recompilation needed.
 
-After analyzing and decompiling the original modules:
-
--   `sata_ahci_power.ko`
--   `leds_ec.ko`
-
-the required initialization sequence was identified and implemented as a userspace script.
-
-Running the script during system startup enables HDD power automatically.
-
-------------------------------------------------------------------------
+---
 
 ## Features
 
--   Enables HDD power on ZSpace Z4S
--   Works with standard Linux kernels
--   No kernel recompilation required
--   Simple installation
--   Compatible with most Debian/Ubuntu-based systems
+- Staggered HDD spin-up (prevents current overload)
+- Bay LED indicators: power, I/O activity, fault, degraded, rebuilding
+- Disk health monitoring via SMART, ZFS (`zpool`), and Linux RAID (`mdstat`)
+- Runs as a systemd daemon
 
-------------------------------------------------------------------------
+---
 
 ## Repository Structure
 
-    .
-    ├── z4s_hdd_power.sh   # HDD power initialization script
-    └── README.md
+```
+.
+├── z4s_daemon          # Main daemon script
+├── z4s-daemon.service  # systemd service unit
+└── README.md
+```
 
-------------------------------------------------------------------------
+---
 
 ## Requirements
 
--   ZSpace Z4S NAS
--   Linux-based operating system
--   Root privileges
--   AHCI/SATA support enabled in kernel
+- ZSpace Z4S NAS
+- Linux with root privileges
+- `smartmontools` (optional, for SMART health checks)
+- `zfsutils-linux` (optional, for ZFS pool status)
 
 ### Tested On
 
--   Ubuntu 22.04
+- Ubuntu 22.04
 
-Other distributions may work but are not guaranteed.
-
-------------------------------------------------------------------------
+---
 
 ## Installation
 
-### 1. Clone Repository
+```bash
+# 1. Copy script
+sudo cp z4s_daemon /usr/local/bin/z4s_daemon
+sudo chmod +x /usr/local/bin/z4s_daemon
 
-``` bash
-git clone https://github.com/YOUR_USERNAME/z4s-hdd-power.git
-cd z4s-hdd-power
-```
-
-### 2. Make Script Executable
-
-``` bash
-chmod +x z4s_hdd_power.sh
-```
-
-### 3. Manual Test (Recommended)
-
-``` bash
-sudo ./z4s_hdd_power.sh
-```
-
-Verify that drives appear:
-
-``` bash
-lsblk
-```
-
-or:
-
-``` bash
-dmesg | grep -i sata
-```
-
-------------------------------------------------------------------------
-
-## Run Automatically at Boot
-
-Create a systemd service:
-
-``` bash
-sudo nano /etc/systemd/system/z4s-hdd-power.service
-```
-
-Add:
-
-``` ini
-[Unit]
-Description=Enable HDD Power on ZSpace Z4S
-After=multi-user.target
-
-[Service]
-Type=oneshot
-ExecStart=/path/to/z4s_hdd_power.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable the service:
-
-``` bash
+# 2. Install service
+sudo cp z4s-daemon.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable z4s-hdd-power.service
+sudo systemctl enable --now z4s-daemon.service
 ```
 
-Reboot:
+---
 
-``` bash
-sudo reboot
+## Usage
+
+```bash
+z4s_daemon boot           # Power on drives
+z4s_daemon monitor        # Start LED monitor loop
+z4s_daemon boot-monitor   # Boot + monitor (used by service)
+z4s_daemon status         # Show all bay status
 ```
 
-------------------------------------------------------------------------
+---
+
+## LED Reference
+
+| State       | Color              |
+|-------------|--------------------|
+| Power on    | Green              |
+| I/O active  | Green blink        |
+| Degraded    | Yellow             |
+| Rebuilding  | Yellow blink       |
+| Fault       | Red                |
+| Empty bay   | Off                |
+
+---
 
 ## Troubleshooting
 
-### Drives Not Detected
-
-Check service status:
-
-``` bash
-systemctl status z4s-hdd-power.service
+```bash
+systemctl status z4s-daemon.service
+journalctl -u z4s-daemon.service -f
 ```
 
-Check logs:
-
-``` bash
-journalctl -u z4s-hdd-power.service
-```
-
-------------------------------------------------------------------------
+---
 
 ## Disclaimer
 
-This project is unofficial and not affiliated with ZSpace.
+Unofficial project, not affiliated with ZSpace. Use at your own risk. Always back up data before testing.
 
-Use at your own risk. Always back up important data before testing.
-
-------------------------------------------------------------------------
-
-## Contributing
-
-Pull requests and improvements are welcome.
-
-------------------------------------------------------------------------
+---
 
 ## License
 
-MIT License (or your preferred license).
+MIT
