@@ -3,22 +3,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Last Commit](https://img.shields.io/github/last-commit/hhai93/zspace-z4s)
 
-Userspace daemon for ZSpace Z4S NAS — enables SATA power and drives bay LED indicators on generic Linux (Ubuntu, Debian, etc.).
-
----
-
-## Background
-
-Stock ZSpace firmware controls SATA power and LEDs via proprietary kernel modules (`sata_ahci_power.ko`, `leds_ec.ko`). These are unavailable on standard Linux kernels. This project reimplements the required EC (Embedded Controller) initialization sequence entirely in userspace — no kernel recompilation needed.
-
----
-
-## Features
-
-- Staggered HDD spin-up (prevents current overload)
-- Bay LED indicators: power, I/O activity, fault, degraded, rebuilding
-- Disk health monitoring via SMART, ZFS (`zpool`), and Linux RAID (`mdstat`)
-- Runs as a systemd daemon
+Userspace daemon for ZSpace Z4S NAS — enables SATA power and drive bay LEDs on generic Linux and Xpenology (ARC loader). Reimplements the proprietary EC initialization sequence without kernel modules.
 
 ---
 
@@ -26,37 +11,78 @@ Stock ZSpace firmware controls SATA power and LEDs via proprietary kernel module
 
 ```
 .
-├── z4s_daemon          # Main daemon script
-├── z4s_daemon.service  # systemd service unit
+├── z4s_daemon              # Main daemon (runs inside DSM/Linux)
+├── z4s_daemon.service      # systemd service unit
+├── xpenology/
+│   ├── z4s_ec_init.sh      # EC power-on script, injected into Arc initrd
+│   └── inject.sh           # Injects z4s_ec_init.sh into Arc's initrd-arc
 └── README.md
+```
+
+## Features
+
+- Staggered HDD spin-up (prevents inrush current)
+- Bay LEDs: power, I/O activity, fault, degraded, rebuilding
+- Health monitoring via SMART, ZFS, Linux RAID
+- Xpenology (ARC loader) support
+
+---
+
+## Generic Linux
+
+```bash
+sudo cp z4s_daemon /etc && sudo chmod +x /etc/z4s_daemon
+sudo cp z4s_daemon.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now z4s_daemon.service
 ```
 
 ---
 
-## Requirements
+## Xpenology (ARC Loader)
 
-- ZSpace Z4S NAS
-- Linux with root privileges
-- `smartmontools` (optional, for SMART health checks)
-- `zfsutils-linux` (optional, for ZFS pool status)
+On ZSpace Z4S, SATA drives have no power until the EC is initialized. This must happen **before** the DSM kernel boots, or DSM will find no drives.
 
-### Tested On
+```
+Arc boot.sh → z4s_ec_init.sh (EC on, SCSI rescan) → kexec → DSM → z4s_daemon monitor
+```
 
-- Ubuntu 22.04
+### Step 1 — Inject into Arc initrd
 
----
-
-## Installation
+> ⚠️ Must be done on a **Full Linux environment ** — requires `zstd`, `python3`, `parted`, `e2fsck`, `resize2fs` which are not available in Arc's busybox environment. (You can use Live CD)
 
 ```bash
-# 1. Copy script
-sudo cp z4s_daemon /usr/local/bin/z4s_daemon
-sudo chmod +x /usr/local/bin/z4s_daemon
+sudo apt install zstd python3 parted e2fsprogs
+sudo bash inject.sh /dev/sdX
+```
 
-# 2. Install service
-sudo cp z4s_daemon.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now z4s_daemon.service
+### Step 2 — Install LED monitor in DSM
+
+SSH into DSM after installation, then install the daemon in monitor-only mode (drives are already powered by Arc):
+
+```bash
+sudo cp z4s_daemon /usr/local/bin/z4s_daemon && sudo chmod +x /usr/local/bin/z4s_daemon
+sudo tee /etc/systemd/system/z4s_daemon.service << 'EOF2'
+[Unit]
+Description=ZSpace Z4S LED Monitor
+After=sysinit.target local-fs.target
+DefaultDependencies=no
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/z4s_daemon monitor
+Restart=on-failure
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+EOF2
+sudo systemctl daemon-reload && sudo systemctl enable --now z4s_daemon.service
+```
+
+### ⚠️ After every Arc update
+
+Arc overwrites `initrd-arc` on update — re-run inject:
+
+```bash
+sudo bash arc-loader/inject.sh /dev/sdX
 ```
 
 ---
@@ -64,41 +90,34 @@ sudo systemctl enable --now z4s_daemon.service
 ## Usage
 
 ```bash
-z4s_daemon boot           # Power on drives
-z4s_daemon monitor        # Start LED monitor loop
-z4s_daemon boot-monitor   # Boot + monitor (used by service)
-z4s_daemon status         # Show all bay status
+z4s_daemon boot-monitor   # boot + monitor (native Linux service)
+z4s_daemon monitor        # LED monitor only (Xpenology service)
+z4s_daemon status         # show bay status
 ```
-
----
 
 ## LED Reference
 
-| State       | Color              |
-|-------------|--------------------|
-| Power on    | Green              |
-| I/O active  | Green blink        |
-| Degraded    | Yellow             |
-| Rebuilding  | Yellow blink       |
-| Fault       | Red                |
-| Empty bay   | Off                |
-
----
+| State      | Color        |
+|------------|--------------|
+| Power on   | Green        |
+| I/O active | Green blink  |
+| Degraded   | Yellow       |
+| Rebuilding | Yellow blink |
+| Fault      | Red          |
+| Empty bay  | Off          |
 
 ## Troubleshooting
 
 ```bash
-systemctl status z4s_daemon.service
 journalctl -u z4s_daemon.service -f
+dmesg | grep z4s-ec          # verify EC init ran (Xpenology)
 ```
 
 ---
 
 ## Disclaimer
 
-Unofficial project, not affiliated with ZSpace. Use at your own risk. Always back up data before testing.
-
----
+Unofficial, not affiliated with ZSpace. Use at your own risk.
 
 ## License
 
