@@ -60,21 +60,21 @@ sudo bash inject.sh /dev/sdX
 SSH into DSM after installation, then install the daemon in monitor-only mode (drives are already powered by Arc):
 
 ```bash
-sudo cp z4s_daemon /usr/local/bin/z4s_daemon && sudo chmod +x /usr/local/bin/z4s_daemon
-sudo tee /etc/systemd/system/z4s_daemon.service << 'EOF2'
-[Unit]
-Description=ZSpace Z4S LED Monitor
-After=sysinit.target local-fs.target
-DefaultDependencies=no
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/z4s_daemon monitor
-Restart=on-failure
-RestartSec=10
-[Install]
-WantedBy=multi-user.target
-EOF2
-sudo systemctl daemon-reload && sudo systemctl enable --now z4s_daemon.service
+sudo cp z4s_daemon /usr/local/bin/z4s_daemon
+sudo chmod +x /usr/local/bin/z4s_daemon
+
+sudo tee /usr/local/etc/rc.d/z4s_daemon.sh << 'RCDEOF'
+#!/bin/sh
+case "$1" in
+    start) /usr/local/bin/z4s_daemon monitor & ;;
+    stop)  kill $(cat /var/run/z4s_daemon.pid 2>/dev/null) 2>/dev/null || true ;;
+    *)     echo "Usage: $0 {start|stop}" ;;
+esac
+RCDEOF
+sudo chmod +x /usr/local/etc/rc.d/z4s_daemon.sh
+
+# Start immediately without rebooting
+sudo /usr/local/etc/rc.d/z4s_daemon.sh start
 ```
 
 ### ⚠️ After every Arc update
