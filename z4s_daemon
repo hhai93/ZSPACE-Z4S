@@ -36,7 +36,7 @@ port_reg() { printf "%02x" $(( 85 - $1 )); }
 
 get_disk_map() {
     local disk path dev port tmp
-    for disk in /sys/block/sd*; do
+    for disk in /sys/block/sata* /sys/block/sd*; do
         [ -d "$disk" ] || continue
         path=$(readlink "$disk") || continue
         [[ "$path" == *usb* ]] && continue
