@@ -27,7 +27,7 @@ wait_ec() {
 }
 
 write_ec() {
-    wait_ec; printf "\x81" | dd of=/dev/port bs=1 seek=102 conv=notrunc status=none
+    wait_ec; printf "\x81"  | dd of=/dev/port bs=1 seek=102 conv=notrunc status=none
     wait_ec; printf "\x$1"  | dd of=/dev/port bs=1 seek=98  conv=notrunc status=none
     wait_ec; printf "\x$2"  | dd of=/dev/port bs=1 seek=98  conv=notrunc status=none
 }
