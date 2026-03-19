@@ -50,6 +50,13 @@ elif [ "$P3_END" -lt $(( DISK_END - 2048 )) ]; then
     # Resize partition table entry (parted)
     parted -s "$DEV" resizepart 3 100%
 
+    # Force kernel to re-read partition table (critical for eMMC/NVMe)
+    partprobe "$DEV" 2>/dev/null || blockdev --rereadpt "$DEV" 2>/dev/null || true
+    sleep 3
+
+    # Verify kernel sees new size before resize
+    blockdev --getsize64 "$P3_DEV" >/dev/null 2>&1 || true
+
     # Resize ext4 filesystem to fill new partition size
     e2fsck -f -y "$P3_DEV" >/dev/null 2>&1 || true
     resize2fs "$P3_DEV"
