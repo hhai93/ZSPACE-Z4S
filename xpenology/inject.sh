@@ -61,6 +61,16 @@ elif [ "$P3_END" -lt $(( DISK_END - 2048 )) ]; then
     e2fsck -f -y "$P3_DEV" >/dev/null 2>&1 || true
     resize2fs "$P3_DEV"
 
+    # Wipe stale signatures from old data inside the expanded p3.
+    echo "[*] Wiping stale filesystem signatures from expanded area..."
+    wipefs -a -t zfs_member "$P3_DEV" 2>/dev/null || true
+    wipefs -a -t zfs "$P3_DEV" 2>/dev/null || true
+
+    # Force blkid to re-probe so udev/tools see ext4 cleanly
+    blkid -p "$P3_DEV" >/dev/null 2>&1 || true
+    udevadm trigger --action=change "$P3_DEV" 2>/dev/null || true
+    udevadm settle 2>/dev/null || true
+
     echo "[*] p3 expanded: $(lsblk -dno SIZE "$P3_DEV")"
 else
     echo "[*] p3 already uses full available space — no resize needed"
@@ -198,6 +208,9 @@ echo "[*] Writing new initrd-arc to p3..."
 rm -f "$INITRD_FILE"
 cp "$TMP_INITRD" "$INITRD_FILE"
 sync
+
+udevadm trigger --action=change "$P3_DEV" 2>/dev/null || true
+udevadm settle 2>/dev/null || true
 
 echo ""
 echo "[OK] Done!"
